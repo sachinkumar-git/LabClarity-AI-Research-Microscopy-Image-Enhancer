@@ -1,0 +1,7 @@
+# Core service (no ML framework) - installs anywhere, enables the bicubic baseline.
+fastapi>=0.115,<1.0
+uvicorn>=0.32,<1.0
+python-multipart>=0.0.18
+pillow>=11.3
+numpy>=2.3
+tifffile>=2025.1.10
