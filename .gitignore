@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Builds
+dist/
+build/
+coverage/
+.pytest_cache/
+
+# Secrets & env
+.env
+.env.*
+!.env.example
+
+# Runtime data
+backend/api-gateway/storage*/
+backend/ai-service/weights/*
+!backend/ai-service/weights/README.md
+
+# Model weights anywhere
+*.pth
+*.pt
+*.safetensors
+*.onnx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

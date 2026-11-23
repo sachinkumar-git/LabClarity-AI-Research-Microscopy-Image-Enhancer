@@ -1,0 +1,66 @@
+# LabClarity AI - full stack. Usage:
+#   cp .env.example .env   (set AI_SERVICE_TOKEN)
+#   docker compose up --build
+# Only the frontend is published; MongoDB, gateway and AI service stay on the private network.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./backend/ai-service
+      args:
+        TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cpu}
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set AI_SERVICE_TOKEN in .env}
+      DEVICE: ${DEVICE:-auto}
+      TILE_SIZE: ${TILE_SIZE:-256}
+      MAX_INPUT_PIXELS: ${MAX_INPUT_PIXELS:-2000000}
+    volumes:
+      - ./backend/ai-service/weights:/app/weights:ro
+    # Uncomment for NVIDIA GPUs (requires the NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }]
+
+  api-gateway:
+    build: ./backend/api-gateway
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/labclarity
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set AI_SERVICE_TOKEN in .env}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      TRUST_PROXY: 1
+    volumes:
+      - gateway-storage:/app/storage
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  mongo-data:
+  gateway-storage:
