@@ -5,3 +5,4 @@ python-multipart>=0.0.18
 pillow>=11.3
 numpy>=2.3
 tifffile>=2025.1.10
+scikit-image>=0.25
