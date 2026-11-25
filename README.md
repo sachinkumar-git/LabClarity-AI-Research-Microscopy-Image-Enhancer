@@ -1,50 +1,77 @@
 # LabClarity AI
 
-**AI super-resolution and restoration for microscopy images.** Upload a micrograph (8/16-bit TIFF, PNG or JPEG), enhance it with pretrained **Real-ESRGAN** or **SwinIR** models, and inspect the result against the original with a before/after slider, synchronized zoom up to 8×, and true-pixel rendering.
+**AI-powered microscopy image restoration and research analysis platform.** Upload micrographs (8/16-bit TIFF, PNG, JPEG), get a measured degradation analysis with an explained pipeline recommendation, run configurable restoration pipelines (denoise → deblur → super-resolution → contrast) with pretrained **Real-ESRGAN**, **SwinIR** and **SCUNet** models or classical methods, compare pipelines side by side with synchronized zoom, quantify results with PSNR/SSIM and no-reference metrics, and export data-driven PDF reports. Every run carries a full scientific audit trail.
 
-![Stack](https://img.shields.io/badge/React_19-Tailwind_v4-0ea5e9) ![Stack](https://img.shields.io/badge/Node_22-Express_5-22c55e) ![Stack](https://img.shields.io/badge/Python-FastAPI-8b5cf6) ![Stack](https://img.shields.io/badge/PyTorch-spandrel-f97316)
+![Stack](https://img.shields.io/badge/React_19-Tailwind_v4-0ea5e9) ![Stack](https://img.shields.io/badge/Node_22-Express_5_MVC-22c55e) ![Stack](https://img.shields.io/badge/Python-FastAPI-8b5cf6) ![Stack](https://img.shields.io/badge/PyTorch-spandrel-f97316) ![Stack](https://img.shields.io/badge/MongoDB-Mongoose-16a34a)
+
+## Features
+
+| Feature | Implementation |
+|---|---|
+| **Intelligent model selection** | Each upload is analysed: noise σ (Immerkær estimator), noise-compensated sharpness, RMS contrast, dynamic-range use. A transparent rule engine recommends a pipeline and **shows the measurement behind every step**, plus warnings (GAN texture, intensity remapping). |
+| **Multi-model comparison** | 1 image × up to 6 pipelines. Outputs appear in a grid that shares **one zoom/pan viewport**, next to a metrics table that highlights the best value per column. |
+| **Restoration pipeline** | Composable steps: non-local means / TV / **SCUNet** denoising, Richardson–Lucy (reflect-padded, no border ringing) / unsharp deblurring, Real-ESRGAN / SwinIR / bicubic super-resolution, CLAHE / percentile contrast. Parameters are bounded and validated in one place: the AI service's pydantic schemas. |
+| **ROI analysis** | Draw a region on the preview; only that region is processed, its coordinates are recorded in the audit, and the viewer crops the original to match exactly. |
+| **Large images** | Overlapping tiled inference (seam-free), configurable tile size for limited VRAM. |
+| **Quality assessment** | *Consistency* PSNR/SSIM (output resampled to the input grid vs the input), *ground-truth* PSNR/SSIM when a reference image is supplied, and no-reference metrics before and after. Each metric is labelled with its method, and an automatic note explains when a low consistency score is expected. |
+| **Batch processing** | Upload up to 10 images and run N images × M pipelines (≤ 60 runs) through a bounded-concurrency background queue, with live progress. |
+| **Experiment workspace** | Experiments group images, runs and history; experiment data never auto-expires (ad-hoc uploads expire after 24 h). |
+| **Scientific audit trail** | Input SHA-256 (re-verified before processing and on demand), model id/version/weights SHA-256/source, every parameter and derived value, timings, device, software versions. Outputs embed a provenance label in PNG metadata. |
+| **Interactive comparison** | Before/after slider, side-by-side and **difference heatmap** views, drag-to-pan, zoom to 8×, true-pixel rendering. Keyboard accessible. |
+| **PDF reports** | Run, batch and experiment reports: images, step table, model provenance, quality tables and an integrity check at report time. Built purely from recorded data, with no generated text. |
+| **Dashboard** | Totals, success rate, runs per day, operation usage, per-model performance and recent runs (MongoDB aggregation pipelines). |
+
+## User interface
+Light **botanical-teal** design system with a selectable dark theme. Theme roles are CSS tokens, so components never hard-code colors. Chart colors were checked against each theme's surface with a colorblind-safety validator.
+
+| Page | What you can do |
+|---|---|
+| **Overview** | Live before/after hero (your latest result, or a clearly labelled synthetic demo processed by the real pipeline), quick actions, recent projects with actions, an activity chart (7/14/30 days), quick stats |
+| **Dashboard** | KPIs, runs per day, operations used, model performance, recent runs |
+| **Enhance** | Upload → analysis and recommendation → pipeline builder → ROI / ground-truth reference → run. Deep links: `?project=<id>`, `?model=<id>` |
+| **Compare** | Pick an image and any of its runs, then use the synchronized grid, fullscreen and metrics table |
+| **Batch Processing** | Live batch list with filters; **retry failed** and **cancel queued** runs; PDF reports |
+| **Models** | Model library with availability, setup instructions (copyable download command) and "Use in Enhance" |
+| **Projects / History** | Search, tag filters, create/rename/delete projects; run history with server-side filters, pagination, retry, delete, downloads |
+
+**Interaction quality:** Motion-powered route transitions; viewport reveal and staggered cards; count-up statistics; chart draw-in animations; sliding active indicators on navigation and tabs; animated dropdowns, accordions and modals (focus management, Escape, arrow-key menus); tooltips on icon controls; skeleton loading states; toasts for real outcomes only; an error boundary per page; route-level code splitting. Animations follow the OS reduced-motion setting and can be forced on or off in **Workspace settings** (avatar menu). Preferences (theme, motion, default model, display name) are stored in the browser only, because there are no accounts. The notifications bell lists real run results from the API.
+
+## Scientific integrity guarantees
+- **Originals are never modified.** They're written once (`wx`), made read-only, fingerprinted with SHA-256, and checked again before every run. If a hash doesn't match, the run is aborted.
+- **Outputs are always labelled.** Filenames carry `_processed_<model>`, and each PNG embeds *"Not verified scientific data"* plus its provenance.
+- **Metrics are never shown out of context.** Consistency is explicitly not called fidelity. Runs with contrast remapping are flagged as non-quantitative, and their 16-bit data export is suppressed.
+- **Recommendations and reports are rule- and data-driven.** No model "explains" the result and no text is fabricated.
+
+## Security
+- Uploads are verified by content (magic bytes), size- and pixel-limited before decoding (a decompression-bomb guard), and stored under server-generated UUID keys with path-traversal protection.
+- Helmet headers, a CORS allowlist and JSON body limits. Per-IP rate limits use separate budgets for polled reads and for writes, plus a stricter upload limit. Errors use a consistent envelope with no stack traces.
+- Gateway → AI service calls are authenticated with a shared token (constant-time comparison). Production startup refuses a weak token, and the AI service has no public port in Docker.
+- Model weights load through torch's safe `weights_only` unpickler. Secrets come only from `.env`, and the frontend CSP disallows inline scripts.
+- **No user accounts:** see *Limitations*. Deploy on a trusted network or add authentication.
 
 ## Architecture
 
 ```
- Browser ── React + Tailwind SPA
-    │   upload (XHR progress) · poll job · compare/download
+ Browser ── React 19 + Tailwind v4 SPA (react-router: Lab · Batches · Runs · Experiments · Dashboard)
+    │   REST / multipart
     ▼
- Node.js API gateway (Express 5, MVC) ──── MongoDB (job records)
-    │   validation · magic-byte checks · rate limits · storage · job queue
+ Node.js API gateway (Express 5, strict MVC) ──── MongoDB (Experiment · Asset · Job)
+    │   validation · magic bytes · rate limits · write-protected storage · job queue · reports · stats
     │   internal HTTP + shared token
     ▼
  Python AI service (FastAPI)
-        Real-ESRGAN / SwinIR via spandrel · tiled CPU/GPU inference · 16-bit I/O
+        pipeline engine · analysis & recommendation · quality metrics · diff maps · spandrel models
 ```
 
-| Layer | Responsibilities |
+| Layer | Structure |
 |---|---|
-| `frontend/` | Drag/drop/paste upload, model picker with live availability, upload progress and job stepper, comparison viewer (slider / side-by-side, zoom, true pixels), metrics, downloads. Shareable result URLs (`?job=<id>`). |
-| `backend/api-gateway/` | Public REST API. Strict MVC: `models/` (Mongoose), `views/` (response serializers), `controllers/`, `routes/`, `services/`, `middleware/`, `config/`. Composition root in `container.js` for dependency injection. |
-| `backend/ai-service/` | Stateless inference microservice: `api/` (routes), `core/` (config, errors, auth), `models/` (registry, loader, inference), `processing/` (I/O, normalization, tiling, resize), `services/` (use cases). |
+| `frontend/src` | `pages/` (lazy-loaded), `components/{overview,lab,batch,run,compare,dashboard,history,models,projects,motion,common,layout}`, `hooks/` (`useApi`, `useZoomPan`, `useFullscreen`, `useLabSession`), `context/` (settings, toasts, catalog), `styles/tokens.css`, `api/`, `utils/` |
+| `backend/api-gateway/src` | `models/` · `views/` (serializers) · `controllers/` · `routes/` · `services/` (assets, runs, jobs, processor, experiments, reports, stats, cleanup) · `middleware/` · `config/` · `container.js` (DI composition root) |
+| `backend/ai-service/app` | `api/` · `pipeline/` (schemas, executor, classical & AI ops) · `quality/` (metrics, analysis, recommender) · `processing/` (I/O, tiling, diff maps) · `models/` (catalog, registry, loader) · `services/` (use cases, audit) |
 
-### Request lifecycle
-1. `POST /api/v1/images` → file type verified by **magic bytes** → model checked against the AI catalogue → original stored under a random key → `202 Accepted` with a job.
-2. A bounded-concurrency queue claims the job **atomically** (`queued → processing`), calls the AI service and stores the results.
-3. The AI service returns `multipart/form-data`: an **8-bit display PNG** plus, for 16-bit grayscale input, a **16-bit PNG at the original intensity scale** for quantitative analysis.
-4. The client polls `GET /api/v1/images/:id` and renders the comparison.
+Every source file stays at or under 150 lines (`node scripts/check-lines.mjs`).
 
-### Microscopy-specific handling
-- 16-bit and float data: robust percentile (0.1–99.9) normalization, inverted back to the original intensity range for the 16-bit output.
-- Grayscale is processed through RGB models and collapsed back; 2-channel data is padded; z-stacks and time series use the first plane; alpha is dropped.
-- Large images run with **overlapping tiled inference**, so they fit in limited VRAM without seams.
-- A clearly labeled **bicubic baseline** gives a non-AI reference and lets the whole pipeline run without model weights.
-
-## Security
-- Uploads verified by content (magic bytes), size-limited, pixel-limited before decoding (decompression-bomb guard), stored under server-generated UUID keys with path-traversal protection.
-- Job IDs are random UUIDs (capability URLs); internal Mongo IDs are never exposed.
-- Helmet headers, CORS allowlist, per-IP rate limits (stricter for uploads), JSON body limits, a consistent error envelope with no stack traces.
-- Gateway → AI service authenticated with a shared token (constant-time comparison); production startup refuses weak or missing tokens; the AI service has no public port in Docker.
-- Weights loaded with torch's safe `weights_only` unpickler (via spandrel). No secrets in code: everything comes from `.env`.
-- Data retention: expired jobs and their files are purged automatically (default 24 h). Crash recovery fails interrupted jobs and re-queues waiting ones.
-
-## Getting started (local development)
+## Getting started
 
 **Prerequisites:** Node.js ≥ 22.9, Python ≥ 3.12, MongoDB (local or Atlas). Optional: an NVIDIA GPU.
 
@@ -53,7 +80,7 @@
 cd backend/ai-service
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements-dev.txt
-# GPU (CUDA 12.6 wheels) - or use https://download.pytorch.org/whl/cpu for CPU only
+# GPU (CUDA 12.6 wheels) - or https://download.pytorch.org/whl/cpu for CPU only
 .\.venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 .\.venv\Scripts\pip install -r requirements-ml.txt
 Copy-Item .env.example .env          # set AI_SERVICE_TOKEN
@@ -63,7 +90,7 @@ Copy-Item .env.example .env          # set AI_SERVICE_TOKEN
 cd backend/api-gateway
 npm install
 Copy-Item .env.example .env          # set MONGODB_URI and the same AI_SERVICE_TOKEN
-npm run dev
+npm run dev                          # or: npm run dev:memory  (throwaway in-memory MongoDB)
 
 # 3. Frontend (new terminal)
 cd frontend
@@ -71,49 +98,61 @@ npm install
 npm run dev                          # http://localhost:5173
 ```
 
-> Ports already in use? Set `PORT` in the gateway `.env`, pass `--port` to uvicorn (and update `AI_SERVICE_URL`), and run the frontend with `VITE_DEV_API_TARGET=http://127.0.0.1:<gateway-port>`.
+> Ports in use? Set `PORT` in the gateway `.env`, pass `--port` to uvicorn (update `AI_SERVICE_URL`), and run Vite with `VITE_DEV_API_TARGET=http://127.0.0.1:<gateway-port>`.
 
-### Model weights
-Download into `backend/ai-service/weights/` (gitignored). Models without weights show as **Setup required** in the UI.
+Without PyTorch or weights the whole platform still works with the classical operators and the bicubic baseline; AI models show **Setup required**.
 
-| Model id | File | Source |
-|---|---|---|
-| `realesrgan-x4plus` | `RealESRGAN_x4plus.pth` | [Real-ESRGAN v0.1.0](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth) |
-| `realesrgan-x2plus` | `RealESRGAN_x2plus.pth` | [Real-ESRGAN v0.2.1](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth) |
-| `swinir-real-x4` | `003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth` | [SwinIR v0.0](https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth) |
+### Model weights → `backend/ai-service/weights/` (gitignored)
 
-## Docker deployment
+| Model id | Task | File | Source |
+|---|---|---|---|
+| `realesrgan-x4plus` | SR ×4 | `RealESRGAN_x4plus.pth` | [Real-ESRGAN v0.1.0](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth) |
+| `realesrgan-x2plus` | SR ×2 | `RealESRGAN_x2plus.pth` | [Real-ESRGAN v0.2.1](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth) |
+| `swinir-real-x4` | SR ×4 | `003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth` | [SwinIR v0.0](https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth) |
+| `scunet-real-psnr` | Denoise | `scunet_color_real_psnr.pth` | [KAIR v1.0](https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth) |
+
+Adding a model = one entry in `app/models/catalog.py` (spandrel auto-detects the architecture).
+
+## Docker
 
 ```bash
 cp .env.example .env        # set AI_SERVICE_TOKEN (>= 32 chars)
 docker compose up --build   # http://localhost:8080
 ```
-Nginx serves the SPA and proxies `/api` (same origin, so no CORS in production). Only the frontend port is published. For GPUs, set `TORCH_INDEX` to the CUDA wheel index and uncomment the `deploy` block in `docker-compose.yml`.
+Nginx serves the SPA and proxies `/api` on the same origin. Only the frontend port is published. For GPUs, set `TORCH_INDEX` to the CUDA wheel index and uncomment the `deploy` block.
 
-## Testing & quality
+## Testing
 
 | Suite | Command | Coverage |
 |---|---|---|
-| Gateway | `cd backend/api-gateway && npm test` | 33 tests: API, validation, security headers, processing pipeline, recovery, cleanup (in-memory MongoDB) |
-| AI service | `cd backend/ai-service && .venv/Scripts/python -m pytest` | 26 tests: decoding, normalization round-trips, tiling equivalence, auth, limits, endpoints |
-| Frontend | `cd frontend && npm test && npm run build` | Utilities, API envelope handling, production build |
-| Code rule | `node scripts/check-lines.mjs` | Every source file ≤ 150 lines |
+| Gateway | `cd backend/api-gateway && npm test` | 54 tests: batch retry/cancel, read/write rate-limit budgets, legacy + research APIs, validation, integrity/tamper detection, comparisons, batches, ROI, cascade deletes, PDF reports, stats, cleanup (in-memory MongoDB) |
+| AI service | `cd backend/ai-service && .venv/Scripts/python -m pytest` | 60 tests: schemas, each operator's measurable effect, noise-estimator accuracy, ROI, metrics, recommender rules, diff maps, multipart API, PNG labels |
+| Frontend | `cd frontend && npm test && npm run build` | 15 tests: pipeline builders/presets, batch grouping, deep links, API envelope, formatters; production build |
+| Rule | `node scripts/check-lines.mjs` | Every source file ≤ 150 lines |
 
-All suites run in GitHub Actions (`.github/workflows/ci.yml`).
+All suites run in GitHub Actions.
 
-## API reference (gateway)
+## API (gateway, `/api/v1`)
 
-| Method | Path | Description |
+| Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/health/live` · `/ready` | Liveness / dependency readiness |
-| `GET` | `/api/v1/models` | Model catalogue with availability and runtime device |
-| `POST` | `/api/v1/images` | Multipart: `image`, `model`, `scale` (2 or 4) → `202` job |
-| `GET` | `/api/v1/images/:id` | Job status, metrics, links |
-| `GET` | `/api/v1/images/:id/{original,preview,enhanced,enhanced-data}` | Files (`enhanced?download=1` for attachment) |
-| `DELETE` | `/api/v1/images/:id` | Delete job and files (`409` while processing) |
+| `GET` | `/health/live`, `/health/ready` | Probes |
+| `GET` | `/models` | Models (task, availability), pipeline operation catalogue, runtime |
+| `GET/POST` | `/experiments`, `GET/PATCH/DELETE /experiments/:id` | Workspace (detail includes images + run history) |
+| `POST` | `/assets` | Multipart `images[]` (+ `experimentId`): store, fingerprint, analyse, recommend |
+| `GET/DELETE` | `/assets/:id`, `GET /assets/:id/{original,preview,verify}` | Source images and integrity check |
+| `POST` | `/runs` | `{ assetIds, pipelines, roi?, referenceAssetId?, experimentId? }` → batch (`202`) |
+| `GET` | `/batches/:id` | Aggregate progress + runs |
+| `POST` | `/batches/:id/retry`, `/batches/:id/cancel`, `/jobs/:id/retry` | Re-queue failed runs; cancel queued runs (runs already processing finish and are reported) |
+| `GET` | `/jobs?experimentId&assetId&batchId&status&model&limit&page` | Run history |
+| `GET/DELETE` | `/jobs/:id`, `GET /jobs/:id/{original,preview,enhanced,enhanced-data,diff}` | Run detail (audit, quality) and files |
+| `GET` | `/reports/{jobs,batches,experiments}/:id` | PDF reports |
+| `GET` | `/stats?days=14` | Dashboard analytics (`days`: 7, 14 or 30) |
+| `POST` | `/images` | Legacy single-upload API (kept for compatibility) |
 
 ## Limitations & roadmap
-- No user accounts: results are private only through unguessable URLs. Add auth (JWT/OAuth) for multi-tenant use.
-- The in-process queue suits a single gateway instance; swap `TaskQueue` for BullMQ/Redis to scale horizontally (same interface).
+- **No user accounts (single-lab deployment).** Anyone who can reach the app can view and delete all experiments. Deploy only on a trusted network, or add authentication (JWT/OAuth) before exposing it.
+- The in-process queue suits one gateway instance; `TaskQueue` can be swapped for BullMQ/Redis behind the same interface.
 - Local disk storage; `storageService` is the seam for S3/GCS.
-- AI super-resolution can hallucinate structures: validate against the original before drawing scientific conclusions.
+- The sharpness metric also depends on specimen structure size; the blur rule is deliberately conservative and its wording hedged.
+- AI restoration can suppress or synthesise structures: validate against the original before drawing scientific conclusions.
