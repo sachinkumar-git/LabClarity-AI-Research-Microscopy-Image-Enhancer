@@ -1,23 +1,35 @@
 @import 'tailwindcss';
+@import './styles/tokens.css';
 
-@theme {
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --color-ink-950: #05080f;
-  --color-ink-900: #0a0f1a;
-  --color-ink-800: #111827;
-  --color-ink-700: #1c2536;
-  --color-line: rgb(148 163 184 / 0.12);
-
-  --color-brand-300: #67e8f9;
-  --color-brand-400: #22d3ee;
-  --color-brand-500: #06b6d4;
-  --color-accent-400: #a78bfa;
-  --color-accent-500: #8b5cf6;
+  --color-ink-950: var(--ink-950); --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800); --color-ink-700: var(--ink-700);
+  --color-white: var(--fg);
+  --color-slate-100: var(--slate-100); --color-slate-200: var(--slate-200); --color-slate-300: var(--slate-300);
+  --color-slate-400: var(--slate-400); --color-slate-500: var(--slate-500); --color-slate-600: var(--slate-600);
+  --color-slate-700: var(--slate-700);
+  --color-line: var(--line);
+  --color-brand-300: var(--brand-300); --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500); --color-brand-600: var(--brand-600); --color-on-brand: var(--on-brand);
+  --color-accent-400: var(--accent-400); --color-accent-500: var(--accent-500);
+  --color-emerald-100: var(--emerald-100); --color-emerald-200: var(--emerald-200); --color-emerald-300: var(--emerald-300);
+  --color-emerald-400: var(--emerald-400); --color-emerald-500: var(--emerald-500);
+  --color-amber-100: var(--amber-100); --color-amber-200: var(--amber-200); --color-amber-300: var(--amber-300);
+  --color-amber-400: var(--amber-400); --color-amber-500: var(--amber-500);
+  --color-rose-100: var(--rose-100); --color-rose-200: var(--rose-200); --color-rose-300: var(--rose-300);
+  --color-rose-400: var(--rose-400); --color-rose-500: var(--rose-500);
+  --color-cyan-50: var(--cyan-50); --color-cyan-400: var(--cyan-400);
+  --color-series-1: var(--series-1); --color-status-critical: var(--status-critical);
+  --color-chart-grid: var(--chart-grid); --color-chart-axis: var(--chart-axis);
 
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-skeleton: skeleton 1.4s ease-in-out infinite;
 
   @keyframes shimmer {
     from { background-position: -200% 0; }
@@ -27,21 +39,23 @@
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: none; }
   }
+  @keyframes skeleton {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
 }
 
 @layer base {
-  html {
-    color-scheme: dark;
-  }
   body {
     @apply min-h-screen bg-ink-950 font-sans text-slate-200 antialiased;
     background-image:
-      radial-gradient(60rem 40rem at 10% -10%, rgb(34 211 238 / 0.10), transparent 60%),
-      radial-gradient(50rem 35rem at 100% 0%, rgb(139 92 246 / 0.10), transparent 60%);
+      radial-gradient(60rem 40rem at 10% -10%, var(--glow-1), transparent 60%),
+      radial-gradient(50rem 35rem at 100% 0%, var(--glow-2), transparent 60%);
     background-attachment: fixed;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   ::selection {
-    @apply bg-brand-400/30 text-white;
+    @apply bg-brand-400/25 text-white;
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-400;
@@ -50,32 +64,52 @@
 
 @layer components {
   .glass {
-    @apply rounded-2xl border border-line bg-ink-900/70 shadow-2xl shadow-black/40 backdrop-blur-xl;
+    @apply rounded-2xl border border-line backdrop-blur-xl;
+    background-color: var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+  }
+  /* Interactive surfaces: subtle lift + border emphasis on hover. */
+  .card-interactive {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--panel-shadow-hover);
+    border-color: color-mix(in oklab, var(--brand-400) 35%, transparent);
   }
   .grid-bg {
     background-image:
-      linear-gradient(rgb(148 163 184 / 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(148 163 184 / 0.06) 1px, transparent 1px);
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 24px 24px;
   }
   .text-gradient {
     @apply bg-gradient-to-r from-brand-300 via-brand-400 to-accent-400 bg-clip-text text-transparent;
   }
+  /* Image wells stay dark in both themes: microscopy data reads best on a dark field. */
   .checkerboard {
-    background-color: #0b1220;
+    background-color: var(--well);
     background-image:
-      linear-gradient(45deg, #111a2b 25%, transparent 25%),
-      linear-gradient(-45deg, #111a2b 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #111a2b 75%),
-      linear-gradient(-45deg, transparent 75%, #111a2b 75%);
+      linear-gradient(45deg, var(--well-alt) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--well-alt) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--well-alt) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--well-alt) 75%);
     background-size: 16px 16px;
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   }
+  .skeleton {
+    @apply animate-skeleton rounded-lg bg-slate-700/40;
+  }
 }
 
+/* Reduced motion: honoured from the OS, or forced from Workspace settings (data-motion). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion='full']) *, :root:not([data-motion='full']) *::before, :root:not([data-motion='full']) *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+:root[data-motion='reduce'] *, :root[data-motion='reduce'] *::before, :root[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
 }
