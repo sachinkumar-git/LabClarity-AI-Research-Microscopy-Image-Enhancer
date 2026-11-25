@@ -15,14 +15,16 @@ export class ApiError extends Error {
 export const apiUrl = (path) => `${API_BASE_URL}${path.startsWith(API_PREFIX) ? '' : API_PREFIX}${path}`;
 
 /** Parses a response body (text) into data, or throws an ApiError. */
-export function parseEnvelope(status, text) {
+export function parseEnvelope(status, text, { withMeta = false } = {}) {
   let body = null;
   try {
     body = text ? JSON.parse(text) : null;
   } catch {
     /* non-JSON (e.g. proxy error page) */
   }
-  if (status >= 200 && status < 300) return body?.data ?? null;
+  if (status >= 200 && status < 300) {
+    return withMeta ? { data: body?.data ?? null, meta: body?.meta ?? null } : body?.data ?? null;
+  }
   const err = body?.error;
   throw new ApiError(err?.message || `Request failed (${status})`, {
     status,
@@ -31,13 +33,20 @@ export function parseEnvelope(status, text) {
   });
 }
 
-export async function request(path, { method = 'GET', signal } = {}) {
+export async function request(path, { method = 'GET', signal, body, withMeta = false } = {}) {
+  const headers = { Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   let response;
   try {
-    response = await fetch(apiUrl(path), { method, signal, headers: { Accept: 'application/json' } });
+    response = await fetch(apiUrl(path), {
+      method,
+      signal,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   } catch (err) {
     if (err.name === 'AbortError') throw err;
     throw new ApiError('Cannot reach the LabClarity server. Is the backend running?');
   }
-  return parseEnvelope(response.status, await response.text());
+  return parseEnvelope(response.status, await response.text(), { withMeta });
 }
