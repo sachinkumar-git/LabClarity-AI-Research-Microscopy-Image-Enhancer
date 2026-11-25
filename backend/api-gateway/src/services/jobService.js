@@ -1,12 +1,13 @@
-/** Business logic for creating, reading and deleting enhancement jobs. */
-import { ALLOWED_IMAGE_TYPES, JOB_STATUS } from '../config/constants.js';
+/** Reading, listing and deleting runs, plus the legacy single-upload endpoint. */
+import { JOB_STATUS } from '../config/constants.js';
 import { Job } from '../models/Job.js';
 import { AppError } from '../utils/AppError.js';
-import { BUCKETS } from './storageService.js';
 
-const HOUR_MS = 60 * 60 * 1000;
+export { sanitizeFilename } from '../utils/sanitize.js';
 
-export function createJobService({ storage, modelService, retentionHours, onJobCreated = () => {} }) {
+const LIST_FILTERS = ['experimentId', 'assetId', 'batchId', 'status', 'model'];
+
+export function createJobService({ storage, modelService, getAssetService, getRunService }) {
   async function findByPublicId(publicId) {
     const job = await Job.findOne({ publicId });
     if (!job) throw AppError.notFound('Job not found');
@@ -16,42 +17,38 @@ export function createJobService({ storage, modelService, retentionHours, onJobC
   return {
     findByPublicId,
 
+    /** Legacy API: upload one image and run a single super-resolution model on it. */
     async create({ file, model, scale }) {
-      await modelService.assertAvailable(model);
-      const { ext } = ALLOWED_IMAGE_TYPES[file.detectedMime];
-      const originalKey = await storage.save(BUCKETS.ORIGINALS, file.buffer, ext);
+      await modelService.assertAvailable(model); // fail fast, before storing anything
+      const [asset] = await getAssetService().createMany([file]);
+      const steps = [{ op: 'super_resolution', model, scale }];
       try {
-        const job = await Job.create({
-          originalName: sanitizeFilename(file.originalname),
-          mimeType: file.detectedMime,
-          sizeBytes: file.size,
-          model,
-          scale,
-          files: { original: originalKey },
-          expiresAt: new Date(Date.now() + retentionHours * HOUR_MS),
-        });
-        onJobCreated(job);
-        return job;
+        const { jobs } = await getRunService().create({ assetIds: [asset.publicId], pipelines: [{ steps }] });
+        return jobs[0];
       } catch (err) {
-        await storage.remove(originalKey);
+        await getAssetService().remove(asset.publicId);
         throw err;
       }
     },
 
+    async list(query = {}, { limit = 50, page = 1 } = {}) {
+      const filter = Object.fromEntries(LIST_FILTERS.filter((k) => query[k]).map((k) => [k, query[k]]));
+      const [items, total] = await Promise.all([
+        Job.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+        Job.countDocuments(filter),
+      ]);
+      return { items, total, page, limit };
+    },
+
+    /** Deletes a run and its outputs. The source image (original) is owned by its asset and kept. */
     async remove(publicId) {
       const job = await findByPublicId(publicId);
       if (job.status === JOB_STATUS.PROCESSING) {
         throw AppError.conflict('Job is currently processing and cannot be deleted');
       }
-      await Promise.all(Object.values(job.files.toObject()).map((key) => storage.remove(key)));
+      const { enhanced, enhancedData, diff } = job.files;
+      await Promise.all([enhanced, enhancedData, diff].map((key) => storage.remove(key)));
       await job.deleteOne();
     },
   };
-}
-
-/** Keeps a display-safe filename: strips paths, control chars and odd symbols. */
-export function sanitizeFilename(name = 'image') {
-  const base = String(name).split(/[\\/]/).pop();
-  const cleaned = base.replace(/[^\w.\- ]+/g, '_').replace(/^\.+/, '').slice(0, 200);
-  return cleaned || 'image';
 }

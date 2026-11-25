@@ -1,28 +1,38 @@
-/** Periodically deletes expired jobs together with their stored files (data retention). */
+/**
+ * Periodically deletes expired ad-hoc data (experiment data has no expiry).
+ * Expired images cascade to their runs; orphaned expired runs are removed individually.
+ */
 import { JOB_STATUS } from '../config/constants.js';
+import { Asset } from '../models/Asset.js';
 import { Job } from '../models/Job.js';
 import { logger } from '../utils/logger.js';
 
-export function createCleanupService({ jobService, intervalMs = 15 * 60 * 1000 }) {
+const expired = () => ({ expiresAt: { $ne: null, $lte: new Date() } });
+
+export function createCleanupService({ jobService, getAssetService, intervalMs = 15 * 60 * 1000 }) {
   let timer = null;
 
-  async function runOnce() {
-    const expired = await Job.find({
-      expiresAt: { $lte: new Date() },
-      status: { $ne: JOB_STATUS.PROCESSING },
-    }).select('publicId');
-
+  async function removeAll(docs, remove) {
     let removed = 0;
-    for (const { publicId } of expired) {
+    for (const { publicId } of docs) {
       try {
-        await jobService.remove(publicId);
+        await remove(publicId);
         removed += 1;
       } catch (err) {
-        logger.warn('Cleanup failed for job', { id: publicId, error: err.message });
+        logger.warn('Cleanup skipped item', { id: publicId, error: err.message });
       }
     }
-    if (removed) logger.info('Expired jobs removed', { count: removed });
     return removed;
+  }
+
+  async function runOnce() {
+    const assets = await Asset.find(expired()).select('publicId');
+    const removedAssets = await removeAll(assets, (id) => getAssetService().remove(id));
+    const jobs = await Job.find({ ...expired(), status: { $ne: JOB_STATUS.PROCESSING } }).select('publicId');
+    const removedJobs = await removeAll(jobs, (id) => jobService.remove(id));
+    const total = removedAssets + removedJobs;
+    if (total) logger.info('Expired data removed', { images: removedAssets, runs: removedJobs });
+    return total;
   }
 
   return {

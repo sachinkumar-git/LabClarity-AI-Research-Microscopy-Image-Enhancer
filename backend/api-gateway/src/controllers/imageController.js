@@ -1,17 +1,21 @@
-/** HTTP layer for image enhancement jobs. Delegates all logic to services. */
+/** HTTP layer for runs (jobs) and their files. Delegates all logic to services. */
 import path from 'node:path';
 import { AppError } from '../utils/AppError.js';
+import { sendStoredFile } from '../utils/sendStoredFile.js';
 import { sendSuccess } from '../views/responseView.js';
-import { toJobView } from '../views/jobView.js';
+import { toJobSummary, toJobView } from '../views/jobView.js';
 
-const CACHE_HEADER = 'private, max-age=3600';
+/** Output names always carry an explicit "processed" label, never the original's name alone. */
+const outputName = (job, suffix = '') =>
+  `${path.parse(job.originalName).name}_processed_${job.model}_x${job.scale}${suffix}.png`;
 
 export function createImageController({ jobService, storage }) {
-  function sendStoredFile(res, key, { contentType, downloadName } = {}) {
-    const headers = { 'Cache-Control': CACHE_HEADER };
-    if (contentType) headers['Content-Type'] = contentType;
-    if (downloadName) headers['Content-Disposition'] = `attachment; filename="${downloadName}"`;
-    return res.sendFile(storage.pathFor(key), { headers });
+  const send = (res, key, opts) => sendStoredFile(res, storage, key, opts);
+
+  async function completedFile(req, linkName, message) {
+    const job = await jobService.findByPublicId(req.params.id);
+    if (!toJobView(job).links[linkName]) throw AppError.notFound(message);
+    return job;
   }
 
   return {
@@ -22,44 +26,44 @@ export function createImageController({ jobService, storage }) {
       return sendSuccess(res, view, { status: 202 });
     },
 
+    async list(req, res) {
+      const { filter, limit, page } = req.validated;
+      const { items, total } = await jobService.list(filter, { limit, page });
+      return sendSuccess(res, items.map(toJobSummary), { meta: { total, page, limit } });
+    },
+
     async show(req, res) {
-      const job = await jobService.findByPublicId(req.params.id);
-      return sendSuccess(res, toJobView(job));
+      return sendSuccess(res, toJobView(await jobService.findByPublicId(req.params.id)));
     },
 
     async original(req, res) {
       const job = await jobService.findByPublicId(req.params.id);
-      return sendStoredFile(res, job.files.original, {
-        contentType: job.mimeType,
-        downloadName: job.originalName,
-      });
+      return send(res, job.files.original, { contentType: job.mimeType, downloadName: job.originalName });
     },
 
     async preview(req, res) {
-      const job = await jobService.findByPublicId(req.params.id);
-      if (!toJobView(job).links.preview) throw AppError.notFound('Preview not available yet');
+      const job = await completedFile(req, 'preview', 'Preview not available');
       // A generated PNG preview wins; browser-safe originals can be served directly.
-      if (job.files.preview) return sendStoredFile(res, job.files.preview, { contentType: 'image/png' });
-      return sendStoredFile(res, job.files.original, { contentType: job.mimeType });
+      if (job.files.preview) return send(res, job.files.preview, { contentType: 'image/png' });
+      return send(res, job.files.original, { contentType: job.mimeType });
     },
 
     async enhanced(req, res) {
-      const job = await jobService.findByPublicId(req.params.id);
-      if (!toJobView(job).links.enhanced) throw AppError.notFound('Enhanced image not available yet');
-      const stem = path.parse(job.originalName).name;
-      const downloadName = req.query.download === '1' ? `${stem}_${job.model}_x${job.scale}.png` : undefined;
-      return sendStoredFile(res, job.files.enhanced, { contentType: 'image/png', downloadName });
+      const job = await completedFile(req, 'enhanced', 'Enhanced image not available yet');
+      const downloadName = req.query.download === '1' ? outputName(job) : undefined;
+      return send(res, job.files.enhanced, { contentType: 'image/png', downloadName });
     },
 
     /** 16-bit grayscale result at the original intensity scale, for quantitative analysis. */
     async enhancedData(req, res) {
-      const job = await jobService.findByPublicId(req.params.id);
-      if (!toJobView(job).links.enhancedData) throw AppError.notFound('16-bit data not available');
-      const stem = path.parse(job.originalName).name;
-      return sendStoredFile(res, job.files.enhancedData, {
-        contentType: 'image/png',
-        downloadName: `${stem}_${job.model}_x${job.scale}_16bit.png`,
-      });
+      const job = await completedFile(req, 'enhancedData', '16-bit data not available');
+      return send(res, job.files.enhancedData, { contentType: 'image/png', downloadName: outputName(job, '_16bit') });
+    },
+
+    async diff(req, res) {
+      const job = await completedFile(req, 'diff', 'Difference map not available');
+      const downloadName = req.query.download === '1' ? outputName(job, '_difference') : undefined;
+      return send(res, job.files.diff, { contentType: 'image/png', downloadName });
     },
 
     async destroy(req, res) {

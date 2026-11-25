@@ -34,11 +34,13 @@ function buildConfig() {
     },
     upload: {
       maxFileSizeMb: toInt('MAX_UPLOAD_MB', 25),
+      maxBatchFiles: Math.max(1, toInt('MAX_BATCH_FILES', 10)),
     },
     storageDir: path.resolve(process.env.STORAGE_DIR || './storage'),
     rateLimit: {
       windowMs: toInt('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
       max: toInt('RATE_LIMIT_MAX', 300),
+      readMax: toInt('RATE_LIMIT_READ_MAX', 3000),
       uploadMax: toInt('UPLOAD_RATE_LIMIT_MAX', 20),
     },
     jobs: {

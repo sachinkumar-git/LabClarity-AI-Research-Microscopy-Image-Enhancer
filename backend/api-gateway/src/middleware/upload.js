@@ -33,3 +33,31 @@ export function verifyImageFile(req, res, next) {
   req.file.detectedMime = detected;
   return next();
 }
+
+export const BATCH_UPLOAD_FIELD = 'images';
+
+/** Multi-file upload for batches; every file is verified by magic bytes. */
+export function createBatchUploadMiddleware({ maxFileSizeMb, maxBatchFiles }) {
+  return multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: maxFileSizeMb * 1024 * 1024,
+      files: maxBatchFiles,
+      fields: 3,
+      fieldSize: 200,
+      parts: maxBatchFiles + 3,
+    },
+  }).array(BATCH_UPLOAD_FIELD, maxBatchFiles);
+}
+
+export function verifyImageFiles(req, res, next) {
+  if (!req.files?.length) return next(AppError.badRequest(`At least one image is required in field "${BATCH_UPLOAD_FIELD}"`));
+  for (const file of req.files) {
+    const detected = detectImageType(file.buffer);
+    if (!detected || !ALLOWED_IMAGE_TYPES[detected]) {
+      return next(AppError.unsupportedMedia(`"${file.originalname}" is not a PNG, JPEG or TIFF image`));
+    }
+    file.detectedMime = detected;
+  }
+  return next();
+}

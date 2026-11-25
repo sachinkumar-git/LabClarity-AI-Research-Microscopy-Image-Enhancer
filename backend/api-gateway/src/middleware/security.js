@@ -11,7 +11,7 @@ export function securityMiddleware({ corsOrigins }) {
     }),
     cors({
       origin: corsOrigins,
-      methods: ['GET', 'POST', 'DELETE'],
+      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
       allowedHeaders: ['Content-Type'],
       maxAge: 600,
     }),

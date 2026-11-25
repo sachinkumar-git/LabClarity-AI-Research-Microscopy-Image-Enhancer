@@ -7,14 +7,14 @@ import { AppError } from '../utils/AppError.js';
 const METRICS_HEADER = 'x-enhance-metrics';
 
 export function createAiClient({ baseUrl, token, timeoutMs }) {
-  async function request(path, { method = 'GET', body, timeout = timeoutMs } = {}) {
-    const headers = token ? { 'X-Internal-Token': token } : {};
+  async function request(path, { method = 'GET', body, headers = {}, timeout = timeoutMs } = {}) {
+    const auth = token ? { 'X-Internal-Token': token } : {};
     let response;
     try {
       response = await fetch(`${baseUrl}${path}`, {
         method,
         body,
-        headers,
+        headers: { ...auth, ...headers },
         signal: AbortSignal.timeout(timeout),
       });
     } catch (err) {
@@ -25,52 +25,63 @@ export function createAiClient({ baseUrl, token, timeoutMs }) {
     return response;
   }
 
-  function postImage(path, { buffer, mimeType, filename }, fields = {}) {
+  function postForm(path, { buffer, mimeType, filename }, fields = {}, extraFiles = {}, timeout) {
     const form = new FormData();
-    Object.entries(fields).forEach(([key, value]) => form.append(key, String(value)));
+    Object.entries(fields).forEach(([key, value]) => value != null && form.append(key, String(value)));
     form.append('image', new Blob([buffer], { type: mimeType }), filename);
-    return request(path, { method: 'POST', body: form });
-  }
-
-  /** Preview: a single PNG, metrics in a header. */
-  async function preview(input) {
-    const res = await postImage('/v1/preview', input);
-    return {
-      buffer: Buffer.from(await res.arrayBuffer()),
-      metrics: parseMetrics(res.headers.get(METRICS_HEADER)),
-    };
-  }
-
-  /** Enhance: multipart with `metrics`, `display` (8-bit PNG) and optional `data` (16-bit PNG). */
-  async function enhance({ model, scale, ...input }) {
-    const res = await postImage('/v1/enhance', input, { model, scale });
-    const parts = await res.formData();
-    const toBuffer = async (part) => (part ? Buffer.from(await part.arrayBuffer()) : null);
-    const metrics = parts.get('metrics');
-    return {
-      buffer: await toBuffer(parts.get('display')),
-      dataBuffer: await toBuffer(parts.get('data')),
-      metrics: parseMetrics(typeof metrics === 'string' ? metrics : await metrics?.text()),
-    };
+    Object.entries(extraFiles).forEach(([key, file]) => {
+      if (file) form.append(key, new Blob([file.buffer], { type: file.mimeType }), file.filename);
+    });
+    return request(path, { method: 'POST', body: form, timeout });
   }
 
   return {
     async health() {
-      const res = await request('/health', { timeout: 3_000 });
-      return res.json();
+      return (await request('/health', { timeout: 3_000 })).json();
     },
 
     async models() {
-      const res = await request('/v1/models', { timeout: 5_000 });
+      return (await (await request('/v1/models', { timeout: 5_000 })).json()).data;
+    },
+
+    async preview(input) {
+      const res = await postForm('/v1/preview', input, {}, {}, 60_000);
+      return { buffer: Buffer.from(await res.arrayBuffer()), metrics: parseJson(res.headers.get(METRICS_HEADER)) };
+    },
+
+    async analyze(input) {
+      return (await (await postForm('/v1/analyze', input, {}, {}, 60_000)).json()).data;
+    },
+
+    /** Validates a pipeline against the AI service's schema; returns { pipeline, scale }. */
+    async validatePipeline(pipeline) {
+      const res = await request('/v1/pipeline/validate', {
+        method: 'POST',
+        body: JSON.stringify(pipeline),
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 5_000,
+      });
       return (await res.json()).data;
     },
 
-    preview,
-    enhance,
+    /** Runs a pipeline. Returns { audit, display, data, diff } (data may be null). */
+    async process({ pipeline, roi, reference, ...input }) {
+      const fields = { pipeline: JSON.stringify(pipeline), roi: roi ? JSON.stringify(roi) : null };
+      const res = await postForm('/v1/process', input, fields, { reference });
+      const parts = await res.formData();
+      const toBuffer = async (part) => (part ? Buffer.from(await part.arrayBuffer()) : null);
+      const audit = parts.get('audit');
+      return {
+        audit: parseJson(typeof audit === 'string' ? audit : await audit?.text()),
+        display: await toBuffer(parts.get('display')),
+        data: await toBuffer(parts.get('data')),
+        diff: await toBuffer(parts.get('diff')),
+      };
+    },
   };
 }
 
-function parseMetrics(raw) {
+function parseJson(raw) {
   try {
     return raw ? JSON.parse(raw) : {};
   } catch {
@@ -81,14 +92,16 @@ function parseMetrics(raw) {
 /** Converts an AI-service error response into an AppError, preserving client errors. */
 async function toAppError(response) {
   let detail = `AI service responded with ${response.status}`;
+  let code;
   try {
     const body = await response.json();
-    if (body?.error?.message) detail = body.error.message;
+    detail = body?.error?.message || detail;
+    code = body?.error?.code;
   } catch {
     /* non-JSON body: keep generic message */
   }
   if ([400, 404, 413, 422].includes(response.status)) {
-    return new AppError(detail, { status: 422, code: 'AI_REJECTED_INPUT' });
+    return new AppError(detail, { status: 422, code: code === 'MODEL_UNAVAILABLE' ? code : 'AI_REJECTED_INPUT' });
   }
   return AppError.aiUnavailable(detail);
 }
