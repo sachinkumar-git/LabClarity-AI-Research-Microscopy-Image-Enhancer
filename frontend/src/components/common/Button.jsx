@@ -1,9 +1,8 @@
 import { LoaderCircle } from 'lucide-react';
 
 const VARIANTS = {
-  primary:
-    'bg-gradient-to-r from-brand-400 to-accent-500 text-ink-950 shadow-lg shadow-brand-500/25 hover:shadow-brand-400/40 hover:brightness-110',
-  secondary: 'border border-line bg-white/5 text-slate-100 hover:bg-white/10',
+  primary: 'bg-brand-600 text-on-brand shadow-sm shadow-brand-600/25 hover:bg-brand-500 hover:shadow-md hover:shadow-brand-600/30',
+  secondary: 'border border-line bg-ink-900/70 text-slate-100 hover:border-brand-400/40 hover:bg-ink-800',
   ghost: 'text-slate-300 hover:bg-white/5 hover:text-white',
   danger: 'border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20',
 };
@@ -14,11 +13,13 @@ const SIZES = {
   lg: 'h-12 gap-2 px-6 text-base',
 };
 
+/** Button / link with hover, press and loading feedback. `as="a"` renders a link. */
 export function Button({
   as: Component = 'button',
   variant = 'primary',
   size = 'md',
   icon: Icon,
+  iconRight: IconRight,
   loading = false,
   disabled,
   className = '',
@@ -28,16 +29,18 @@ export function Button({
   const isDisabled = disabled || loading;
   return (
     <Component
-      className={`inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-200
-        disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100
+      className={`group/btn inline-flex items-center justify-center rounded-xl font-semibold whitespace-nowrap transition-all duration-200 ease-out
+        select-none active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:active:scale-100
         ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       disabled={Component === 'button' ? isDisabled : undefined}
       aria-disabled={isDisabled || undefined}
+      aria-busy={loading || undefined}
       {...(Component === 'button' && !props.type ? { type: 'button' } : {})}
       {...props}
     >
       {loading ? <LoaderCircle className="size-4 animate-spin" /> : Icon && <Icon className="size-4" />}
       {children}
+      {IconRight && <IconRight className="size-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />}
     </Component>
   );
 }
