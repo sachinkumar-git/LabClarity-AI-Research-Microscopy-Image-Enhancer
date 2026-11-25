@@ -38,10 +38,11 @@ describe('Image job API', () => {
     assert.equal(res.body.data.links.enhanced, null);
   });
 
-  it('detects TIFF by content and has no preview until processed', async () => {
+  it('detects TIFF by content and generates its browser preview at upload', async () => {
     const res = await upload(TIFF_BYTES, 'stack.tif', { model: 'bicubic', scale: '2' }).expect(202);
     assert.equal(res.body.data.mimeType, 'image/tiff');
-    assert.equal(res.body.data.links.preview, null);
+    assert.ok(res.body.data.links.preview);
+    await request(app).get(res.body.data.links.preview).expect(200);
   });
 
   it('rejects a non-image disguised with a .png extension (415)', async () => {

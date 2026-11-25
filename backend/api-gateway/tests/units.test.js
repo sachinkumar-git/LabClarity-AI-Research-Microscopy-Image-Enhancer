@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { detectImageType } from '../src/utils/fileSignature.js';
-import { sanitizeFilename } from '../src/services/jobService.js';
+import { sanitizeFilename } from '../src/utils/sanitize.js';
 import { createStorageService } from '../src/services/storageService.js';
 import { TaskQueue } from '../src/utils/TaskQueue.js';
 import { FAKE_PNG_BYTES, JPEG_BYTES, PNG_BYTES, TIFF_BYTES } from './helpers/fixtures.js';
@@ -76,5 +76,22 @@ describe('TaskQueue', () => {
     await queue.onIdle();
     assert.deepEqual(errors, ['boom']);
     assert.ok(ran);
+  });
+});
+
+describe('createApiLimiter', () => {
+  it('keeps separate budgets for reads and writes', async () => {
+    const { default: express } = await import('express');
+    const { default: request } = await import('supertest');
+    const { createApiLimiter } = await import('../src/middleware/rateLimiter.js');
+    const app = express();
+    app.use(createApiLimiter({ windowMs: 60_000, max: 2, readMax: 4 }));
+    app.all('/x', (req, res) => res.json({ ok: true }));
+    await request(app).post('/x').expect(200);
+    await request(app).post('/x').expect(200);
+    const blocked = await request(app).post('/x').expect(429);
+    assert.equal(blocked.body.error.code, 'RATE_LIMITED');
+    for (let i = 0; i < 4; i += 1) await request(app).get('/x').expect(200); // reads unaffected by writes
+    await request(app).get('/x').expect(429);
   });
 });
