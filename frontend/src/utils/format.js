@@ -21,3 +21,14 @@ export function formatMegapixels(w, h) {
   if (!w || !h) return '—';
   return `${((w * h) / 1e6).toFixed(w * h >= 1e7 ? 0 : 2)} MP`;
 }
+
+/** "just now", "5 min ago", "3 h ago", "2 d ago", then a date. */
+export function timeAgo(value, now = Date.now()) {
+  if (!value) return '—';
+  const seconds = Math.max(0, (now - new Date(value).getTime()) / 1000);
+  if (seconds < 45) return 'just now';
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)} h ago`;
+  if (seconds < 7 * 86_400) return `${Math.round(seconds / 86_400)} d ago`;
+  return new Date(value).toLocaleDateString();
+}

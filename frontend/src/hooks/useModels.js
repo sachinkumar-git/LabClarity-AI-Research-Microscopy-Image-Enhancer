@@ -4,12 +4,12 @@ import { listModels } from '../api/imageApi.js';
 import { MODELS_REFRESH_MS } from '../config.js';
 
 export function useModels() {
-  const [state, setState] = useState({ models: [], runtime: null, loading: true, error: null });
+  const [state, setState] = useState({ models: [], operations: [], runtime: null, loading: true, error: null });
 
   const load = useCallback(async (signal) => {
     try {
       const data = await listModels(signal);
-      setState({ models: data.models, runtime: data.runtime, loading: false, error: null });
+      setState({ models: data.models, operations: data.operations ?? [], runtime: data.runtime, loading: false, error: null });
     } catch (err) {
       if (err.name === 'AbortError') return;
       setState((prev) => ({ ...prev, loading: false, error: err }));

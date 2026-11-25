@@ -1,0 +1,51 @@
+/*
+ * Theme tokens. Utilities such as `text-white`, `text-slate-400` and `bg-ink-950` are used as
+ * semantic roles (strongest ink, secondary ink, page surface ...); each theme maps them to
+ * concrete colours here. Light = botanical teal (default); dark = deep green-black.
+ * Chart colours were validated with the dataviz palette checker against each surface.
+ */
+:root {
+  color-scheme: light;
+  --ink-950: #f2f7f5; --ink-900: #ffffff; --ink-800: #e9f1ee; --ink-700: #dbe6e2;
+  --fg: #0f1c18;
+  --slate-100: #17231f; --slate-200: #22302b; --slate-300: #33423c; --slate-400: #4a5a53;
+  --slate-500: #5f6f68; --slate-600: #8a9893; --slate-700: #c3cfca;
+  --line: rgb(15 70 58 / 0.12);
+  --brand-300: #0f766e; --brand-400: #0d9488; --brand-500: #0f766e; --brand-600: #0b5d57; --on-brand: #ffffff;
+  --accent-400: #059669; --accent-500: #047857;
+  --emerald-100: #064e3b; --emerald-200: #065f46; --emerald-300: #047857; --emerald-400: #059669; --emerald-500: #10b981;
+  --amber-100: #78350f; --amber-200: #92400e; --amber-300: #b45309; --amber-400: #d97706; --amber-500: #f59e0b;
+  --rose-100: #881337; --rose-200: #9f1239; --rose-300: #be123c; --rose-400: #e11d48; --rose-500: #f43f5e;
+  --cyan-50: #134e4a; --cyan-400: #0d9488;
+  --series-1: #0d9488; --status-critical: #d03b3b;
+  --chart-grid: rgb(15 70 58 / 0.08); --chart-axis: rgb(15 70 58 / 0.22);
+  --panel-bg: rgb(255 255 255 / 0.86);
+  --panel-shadow: 0 1px 2px rgb(15 60 50 / 0.04), 0 12px 32px -12px rgb(15 60 50 / 0.12);
+  --panel-shadow-hover: 0 2px 4px rgb(15 60 50 / 0.05), 0 20px 40px -14px rgb(15 60 50 / 0.2);
+  --grid-line: rgb(15 70 58 / 0.06);
+  --glow-1: rgb(13 148 136 / 0.10); --glow-2: rgb(16 185 129 / 0.08);
+  --well: #121a18; --well-alt: #18221f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ink-950: #07110f; --ink-900: #0c1a17; --ink-800: #12231f; --ink-700: #1a2e29;
+  --fg: #f1f7f5;
+  --slate-100: #eef4f2; --slate-200: #dbe5e1; --slate-300: #c2cfca; --slate-400: #9cada6;
+  --slate-500: #7d8f88; --slate-600: #5a6b65; --slate-700: #34443f;
+  --line: rgb(148 190 178 / 0.13);
+  --brand-300: #5eead4; --brand-400: #2dd4bf; --brand-500: #14b8a6; --brand-600: #14b8a6; --on-brand: #042f2b;
+  --accent-400: #6ee7b7; --accent-500: #34d399;
+  --emerald-100: #d1fae5; --emerald-200: #a7f3d0; --emerald-300: #6ee7b7; --emerald-400: #34d399; --emerald-500: #10b981;
+  --amber-100: #fef3c7; --amber-200: #fde68a; --amber-300: #fcd34d; --amber-400: #fbbf24; --amber-500: #f59e0b;
+  --rose-100: #ffe4e6; --rose-200: #fecdd3; --rose-300: #fda4af; --rose-400: #fb7185; --rose-500: #f43f5e;
+  --cyan-50: #f0fdfa; --cyan-400: #2dd4bf;
+  --series-1: #0fa596; --status-critical: #d03b3b;
+  --chart-grid: rgb(148 190 178 / 0.1); --chart-axis: rgb(148 190 178 / 0.25);
+  --panel-bg: rgb(12 26 23 / 0.78);
+  --panel-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.5);
+  --panel-shadow-hover: 0 28px 56px -16px rgb(0 0 0 / 0.65);
+  --grid-line: rgb(148 190 178 / 0.06);
+  --glow-1: rgb(20 184 166 / 0.10); --glow-2: rgb(52 211 153 / 0.07);
+  --well: #0b1210; --well-alt: #111b18;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, apiUrl, parseEnvelope } from '../api/client.js';
 import { formatBytes, formatDimensions, formatDuration, formatMegapixels } from './format.js';
-import { isBrowserPreviewable, validateFile } from './validateFile.js';
+import { validateFile } from './validateFile.js';
 
 const fakeFile = (name, type, size = 1024) => ({ name, type, size });
 
@@ -29,11 +29,6 @@ describe('validateFile', () => {
     expect(validateFile(fakeFile('a.png', 'image/png', 0))).toMatch(/empty/);
     expect(validateFile(fakeFile('a.png', 'image/png', 26 * 1024 * 1024))).toMatch(/larger/);
     expect(validateFile(null)).toMatch(/choose/);
-  });
-
-  it('knows which formats the browser can preview', () => {
-    expect(isBrowserPreviewable(fakeFile('a.jpg', 'image/jpeg'))).toBe(true);
-    expect(isBrowserPreviewable(fakeFile('a.tif', 'image/tiff'))).toBe(false);
   });
 });
 

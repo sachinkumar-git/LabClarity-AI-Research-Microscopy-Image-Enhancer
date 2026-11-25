@@ -13,5 +13,3 @@ export function validateFile(file) {
   return null;
 }
 
-/** Browsers can render PNG/JPEG directly; TIFF needs the server-generated preview. */
-export const isBrowserPreviewable = (file) => /^image\/(png|jpeg)$/.test(file?.type ?? '');
