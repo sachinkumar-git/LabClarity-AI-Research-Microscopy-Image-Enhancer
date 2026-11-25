@@ -1,37 +1,34 @@
-import { useState } from 'react';
-import { Columns2, Grid3x3, SquareSplitHorizontal } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Columns2, Flame, Grid3x3, Maximize2, Minimize2, RotateCcw, SquareSplitHorizontal } from 'lucide-react';
+import { useFullscreen } from '../../hooks/useFullscreen.js';
+import { useZoomPan } from '../../hooks/useZoomPan.js';
+import { Tooltip } from '../common/Tooltip.jsx';
 import { SegmentedControl } from '../common/SegmentedControl.jsx';
 import { CompareSlider } from './CompareSlider.jsx';
+import { DifferenceView } from './DifferenceView.jsx';
 import { SideBySide } from './SideBySide.jsx';
 
-const MODES = [
-  { value: 'slider', label: 'Slider', icon: SquareSplitHorizontal },
-  { value: 'side', label: 'Side by side', icon: Columns2 },
-];
 const ZOOMS = [1, 2, 4, 8].map((z) => ({ value: z, label: `${z}×` }));
 
-/** Comparison toolbar + viewer. When zoomed, moving the pointer pans the magnified region. */
-export function CompareViewer({ originalSrc, enhancedSrc, width, height, labels }) {
+/** Comparison toolbar + viewer with synchronised zoom and drag-to-pan in every mode. */
+export function CompareViewer({ originalSrc, enhancedSrc, diffSrc, diffStats, width, height, crop, labels }) {
+  const modes = [
+    { value: 'slider', label: 'Slider', icon: SquareSplitHorizontal },
+    { value: 'side', label: 'Side by side', icon: Columns2 },
+    ...(diffSrc ? [{ value: 'diff', label: 'Difference', icon: Flame }] : []),
+  ];
   const [mode, setMode] = useState('slider');
-  const [zoom, setZoom] = useState(1);
-  const [origin, setOrigin] = useState('50% 50%');
   const [pixelated, setPixelated] = useState(true);
+  const view = useZoomPan();
+  const rootRef = useRef(null);
+  const fs = useFullscreen(rootRef);
   const aspect = width && height ? `${width} / ${height}` : '4 / 3';
-
-  const onPointerMove = (e) => {
-    if (zoom === 1) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setOrigin(`${Math.min(100, Math.max(0, x))}% ${Math.min(100, Math.max(0, y))}%`);
-  };
-
-  const shared = { originalSrc, enhancedSrc, aspect, zoom, origin, pixelated };
+  const shared = { originalSrc, enhancedSrc, aspect, view, pixelated, crop };
 
   return (
-    <div className="animate-fade-in space-y-4">
+    <div ref={rootRef} className={`animate-fade-in space-y-4 ${fs.isFullscreen ? 'overflow-auto bg-ink-950 p-6' : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl label="Comparison mode" options={MODES} value={mode} onChange={setMode} size="sm" />
+        <SegmentedControl label="Comparison mode" options={modes} value={mode} onChange={setMode} size="sm" />
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -43,14 +40,26 @@ export function CompareViewer({ originalSrc, enhancedSrc, width, height, labels 
           >
             <Grid3x3 className="size-3.5" aria-hidden /> True pixels
           </button>
-          <SegmentedControl label="Zoom" options={ZOOMS} value={zoom} onChange={setZoom} size="sm" />
+          <SegmentedControl label="Zoom" options={ZOOMS} value={view.zoom} onChange={view.setZoom} size="sm" />
+          <Tooltip label="Reset zoom and pan">
+            <button type="button" onClick={view.reset} className="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-white active:scale-95" aria-label="Reset view">
+              <RotateCcw className="size-3.5" />
+            </button>
+          </Tooltip>
+          {fs.supported && (
+            <Tooltip label={fs.isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}>
+              <button type="button" onClick={fs.toggle} className="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-white active:scale-95" aria-label={fs.isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+                {fs.isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
 
-      <div onPointerMove={onPointerMove} className={zoom > 1 ? 'cursor-crosshair' : ''}>
-        {mode === 'slider' ? <CompareSlider {...shared} /> : <SideBySide {...shared} labels={labels} />}
-      </div>
-      {zoom > 1 && <p className="text-center text-xs text-slate-500">Move the pointer over the image to pan.</p>}
+      {mode === 'slider' && <CompareSlider {...shared} />}
+      {mode === 'side' && <SideBySide {...shared} labels={labels} />}
+      {mode === 'diff' && <DifferenceView enhancedSrc={enhancedSrc} diffSrc={diffSrc} aspect={aspect} view={view} stats={diffStats} />}
+      {view.panning && <p className="text-center text-xs text-slate-500">Drag the image to pan · views stay synchronised</p>}
     </div>
   );
 }
