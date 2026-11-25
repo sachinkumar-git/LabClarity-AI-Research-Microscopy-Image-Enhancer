@@ -4,13 +4,15 @@ import { ACCEPTED_TYPES, MAX_UPLOAD_MB } from '../../config.js';
 
 const ACCEPT = Object.entries(ACCEPTED_TYPES).flatMap(([mime, exts]) => [mime, ...exts]).join(',');
 
-/** Drag-and-drop / click / paste file picker. */
-export function Dropzone({ onFile, disabled = false, compact = false }) {
+/** Drag-and-drop / click / paste file picker. With `multiple`, `onFiles` receives an array. */
+export function Dropzone({ onFile, onFiles, multiple = false, disabled = false, compact = false }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
 
   const pick = (files) => {
-    if (!disabled && files?.[0]) onFile(files[0]);
+    if (disabled || !files?.length) return;
+    if (multiple) onFiles(Array.from(files));
+    else onFile(files[0]);
   };
 
   const handleDrop = (e) => {
@@ -48,7 +50,7 @@ export function Dropzone({ onFile, disabled = false, compact = false }) {
       </span>
       <div className="relative">
         <p className="text-sm font-medium text-white">
-          {dragging ? 'Drop to upload' : <>Drop an image or <span className="text-brand-300">browse</span></>}
+          {dragging ? 'Drop to upload' : <>Drop {multiple ? 'images' : 'an image'} or <span className="text-brand-300">browse</span></>}
         </p>
         <p className="mt-1 text-xs text-slate-500">PNG, JPEG or TIFF (8/16-bit) · up to {MAX_UPLOAD_MB} MB</p>
       </div>
@@ -56,6 +58,7 @@ export function Dropzone({ onFile, disabled = false, compact = false }) {
         ref={inputRef}
         type="file"
         accept={ACCEPT}
+        multiple={multiple}
         className="hidden"
         onChange={(e) => {
           pick(e.target.files);
