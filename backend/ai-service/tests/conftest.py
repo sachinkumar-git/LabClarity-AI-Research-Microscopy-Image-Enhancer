@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import replace
 
 import numpy as np
@@ -60,3 +61,12 @@ def gray16_tiff() -> bytes:
     """Dim 16-bit fluorescence-like image occupying a narrow intensity band."""
     rng = np.random.default_rng(1)
     return tiff_bytes(rng.integers(1000, 4000, (32, 48), dtype=np.uint16))
+
+
+def parse_multipart(res) -> dict[str, bytes]:
+    boundary = res.headers["content-type"].split("boundary=")[1].encode()
+    parts = {}
+    for chunk in res.content.split(b"--" + boundary)[1:-1]:
+        head, body = chunk[2:].split(b"\r\n\r\n", 1)
+        parts[re.search(rb'name="([^"]+)"', head).group(1).decode()] = body[:-2]
+    return parts

@@ -1,13 +1,12 @@
 import io
 import json
-import re
 
 import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import create_app
-from tests.conftest import png_bytes
+from tests.conftest import parse_multipart, png_bytes
 
 
 def enhance(client, data, model="bicubic", scale=4, name="img.png"):
@@ -18,15 +17,6 @@ def enhance(client, data, model="bicubic", scale=4, name="img.png"):
 
 def decode_png(content: bytes) -> Image.Image:
     return Image.open(io.BytesIO(content))
-
-
-def parse_multipart(res) -> dict[str, bytes]:
-    boundary = res.headers["content-type"].split("boundary=")[1].encode()
-    parts = {}
-    for chunk in res.content.split(b"--" + boundary)[1:-1]:
-        head, body = chunk[2:].split(b"\r\n\r\n", 1)
-        parts[re.search(rb'name="([^"]+)"', head).group(1).decode()] = body[:-2]
-    return parts
 
 
 def test_health_is_public_and_minimal(settings):
