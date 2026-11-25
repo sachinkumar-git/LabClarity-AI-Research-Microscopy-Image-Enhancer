@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from PIL import Image
 
 from app import __version__
-from app.api import routes_enhance, routes_health, routes_models
+from app.api import routes_enhance, routes_health, routes_models, routes_pipeline
 from app.core.config import Settings, get_settings
 from app.core.errors import register_error_handlers
 from app.models.loader import ModelCache
@@ -58,4 +58,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_health.router)
     app.include_router(routes_models.router)
     app.include_router(routes_enhance.router)
+    app.include_router(routes_pipeline.router)
     return app

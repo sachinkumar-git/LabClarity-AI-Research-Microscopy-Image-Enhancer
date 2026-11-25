@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import tifffile
 from PIL import Image, UnidentifiedImageError
+from PIL.PngImagePlugin import PngInfo
 
 from app.core.errors import ImageTooLargeError, InvalidImageError
 from app.processing.normalize import NormParams, to_unit_range
@@ -92,14 +93,18 @@ def _read_pillow(data: bytes, max_pixels: int) -> np.ndarray:
     return arr
 
 
-def encode_png(arr: np.ndarray, compress_level: int = 3) -> bytes:
-    """Encodes HxWx{1,3} uint8/uint16 to PNG. 16-bit is kept for grayscale only (PNG/Pillow limit)."""
+def encode_png(arr: np.ndarray, compress_level: int = 3, metadata: dict | None = None) -> bytes:
+    """Encodes HxWx{1,3} uint8/uint16 to PNG. 16-bit is kept for grayscale only (PNG/Pillow limit).
+    `metadata` is embedded as PNG text chunks (used to label processed outputs)."""
     if arr.shape[-1] == 1:
         img = Image.fromarray(arr[..., 0])  # uint8 -> "L", uint16 -> "I;16"
     elif arr.shape[-1] == 3:
         img = Image.fromarray((arr >> 8).astype(np.uint8) if arr.dtype == np.uint16 else arr)
     else:
         raise InvalidImageError("Cannot encode image with this channel count")
+    info = PngInfo()
+    for key, value in (metadata or {}).items():
+        info.add_itxt(key, str(value))
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG", compress_level=compress_level)
+    img.save(buffer, format="PNG", compress_level=compress_level, pnginfo=info)
     return buffer.getvalue()

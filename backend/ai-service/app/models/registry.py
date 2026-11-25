@@ -1,57 +1,25 @@
-"""Catalogue of supported models and their availability on this host."""
+"""Model availability on this host, plus weight fingerprints for the audit trail."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+from functools import lru_cache
 from pathlib import Path
 
 from app.core.errors import ModelUnavailableError, UnknownModelError
+from app.models.catalog import MODEL_SPECS, ModelSpec
 
 ALLOWED_SCALES = (2, 4)
 
-
-@dataclass(frozen=True)
-class ModelSpec:
-    id: str
-    name: str
-    description: str
-    kind: str  # "baseline" | "ai"
-    weights_file: str | None = None
-    source_url: str | None = None
+__all__ = ["ALLOWED_SCALES", "ModelRegistry", "ModelSpec"]
 
 
-MODEL_SPECS: tuple[ModelSpec, ...] = (
-    ModelSpec(
-        id="realesrgan-x4plus",
-        name="Real-ESRGAN x4plus",
-        description="GAN-based restoration; strong denoising and sharpening of real-world degradations.",
-        kind="ai",
-        weights_file="RealESRGAN_x4plus.pth",
-        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
-    ),
-    ModelSpec(
-        id="realesrgan-x2plus",
-        name="Real-ESRGAN x2plus",
-        description="Native 2x Real-ESRGAN; fewer hallucinated details at moderate magnification.",
-        kind="ai",
-        weights_file="RealESRGAN_x2plus.pth",
-        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
-    ),
-    ModelSpec(
-        id="swinir-real-x4",
-        name="SwinIR-M Real-SR x4",
-        description="Transformer-based restoration; preserves fine structures with fewer GAN artefacts.",
-        kind="ai",
-        weights_file="003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth",
-        source_url="https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/"
-        "003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth",
-    ),
-    ModelSpec(
-        id="bicubic",
-        name="Bicubic (baseline)",
-        description="Classical interpolation, not AI. Reference point for judging AI enhancement.",
-        kind="baseline",
-    ),
-)
+@lru_cache(maxsize=16)
+def _sha256(path: str, mtime_ns: int) -> str:  # mtime in the key: re-hash if the file changes
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ModelRegistry:
@@ -60,14 +28,22 @@ class ModelRegistry:
         self._ml_available = ml_available
         self._specs = {spec.id: spec for spec in specs}
 
-    def get(self, model_id: str) -> ModelSpec:
+    def get(self, model_id: str, task: str | None = None) -> ModelSpec:
         spec = self._specs.get(model_id)
         if spec is None:
             raise UnknownModelError(f"Unknown model '{model_id}'")
+        if task and spec.task != task:
+            raise UnknownModelError(f"Model '{model_id}' cannot be used for {task}")
         return spec
 
     def weights_path(self, spec: ModelSpec) -> Path:
         return self._weights_dir / spec.weights_file
+
+    def weights_sha256(self, spec: ModelSpec) -> str | None:
+        if spec.kind != "ai":
+            return None
+        path = self.weights_path(spec)
+        return _sha256(str(path), path.stat().st_mtime_ns) if path.is_file() else None
 
     def unavailable_reason(self, spec: ModelSpec) -> str | None:
         if spec.kind == "baseline":
@@ -78,10 +54,26 @@ class ModelRegistry:
             return f"Weights file '{spec.weights_file}' not found"
         return None
 
+    def is_available(self, model_id: str) -> bool:
+        spec = self._specs.get(model_id)
+        return spec is not None and self.unavailable_reason(spec) is None
+
     def ensure_available(self, spec: ModelSpec) -> None:
         reason = self.unavailable_reason(spec)
         if reason:
             raise ModelUnavailableError(f"Model '{spec.id}' is unavailable: {reason}")
+
+    def provenance(self, spec: ModelSpec) -> dict:
+        """What the audit trail records about a model used in a run."""
+        return {
+            "id": spec.id,
+            "name": spec.name,
+            "kind": spec.kind,
+            "version": spec.version,
+            "weightsFile": spec.weights_file,
+            "weightsSha256": self.weights_sha256(spec),
+            "source": spec.source_url,
+        }
 
     def describe(self) -> list[dict]:
         return [
@@ -90,7 +82,11 @@ class ModelRegistry:
                 "name": spec.name,
                 "description": spec.description,
                 "kind": spec.kind,
-                "scales": list(ALLOWED_SCALES),
+                "task": spec.task,
+                "version": spec.version,
+                "weightsFile": spec.weights_file,
+                "source": spec.source_url,
+                "scales": list(ALLOWED_SCALES) if spec.task == "super_resolution" else [1],
                 "available": self.unavailable_reason(spec) is None,
                 "unavailableReason": self.unavailable_reason(spec),
             }
